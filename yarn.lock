@@ -2668,7 +2668,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/den@workspace:packages/den"
   dependencies:
+    "@protobufjs/base64": 1.1.2
+    "@types/dom-webcodecs": 0.1.7
     async-mutex: 0.4.0
+    eventemitter3: 5.0.1
     xacro-parser: 0.3.9
   languageName: unknown
   linkType: soft
@@ -5904,6 +5907,13 @@ __metadata:
   version: 0.0.3
   resolution: "@types/doctrine@npm:0.0.3"
   checksum: 7ca9c8ff4d2da437785151c9eef0dd80b8fa12e0ff0fcb988458a78de4b6f0fc92727ba5bbee446e1df615a91f03053c5783b30b7c21ab6ceab6a42557e93e50
+  languageName: node
+  linkType: hard
+
+"@types/dom-webcodecs@npm:0.1.7":
+  version: 0.1.7
+  resolution: "@types/dom-webcodecs@npm:0.1.7"
+  checksum: f9934231fc1d9e56be8eba9eca314a4d9ba4fb8f9069c648b03511a2b5e43321ca579ecf6d1b17cbdbecbacb49a0551329835eea234acc210fb6a365fb24985f
   languageName: node
   linkType: hard
 

@@ -12,9 +12,10 @@ import { CameraCalibration, CompressedImage, RawImage } from "@foxglove/schemas"
 import { SettingsTreeAction, SettingsTreeFields } from "@foxglove/studio";
 
 import { IMAGE_RENDERABLE_DEFAULT_SETTINGS, ImageRenderable } from "./Images/ImageRenderable";
-import { ALL_CAMERA_INFO_SCHEMAS, AnyImage } from "./Images/ImageTypes";
+import { ALL_CAMERA_INFO_SCHEMAS, AnyImage, CompressedVideo } from "./Images/ImageTypes";
 import {
   normalizeCompressedImage,
+  normalizeCompressedVideo,
   normalizeRawImage,
   normalizeRosCompressedImage,
   normalizeRosImage,
@@ -27,6 +28,7 @@ import { SettingsTreeEntry } from "../SettingsManager";
 import {
   CAMERA_CALIBRATION_DATATYPES,
   COMPRESSED_IMAGE_DATATYPES,
+  COMPRESSED_VIDEO_DATATYPES,
   RAW_IMAGE_DATATYPES,
 } from "../foxglove";
 import {
@@ -114,6 +116,11 @@ export class Images extends SceneExtension<ImageRenderable> {
         schemaNames: COMPRESSED_IMAGE_DATATYPES,
         subscription: { handler: this.#handleCompressedImage },
       },
+      {
+        type: "schema",
+        schemaNames: COMPRESSED_VIDEO_DATATYPES,
+        subscription: { handler: this.#handleCompressedVideo },
+      },
     ];
   }
 
@@ -142,7 +149,8 @@ export class Images extends SceneExtension<ImageRenderable> {
           topicIsConvertibleToSchema(topic, ROS_IMAGE_DATATYPES) ||
           topicIsConvertibleToSchema(topic, ROS_COMPRESSED_IMAGE_DATATYPES) ||
           topicIsConvertibleToSchema(topic, RAW_IMAGE_DATATYPES) ||
-          topicIsConvertibleToSchema(topic, COMPRESSED_IMAGE_DATATYPES)
+          topicIsConvertibleToSchema(topic, COMPRESSED_IMAGE_DATATYPES) ||
+          topicIsConvertibleToSchema(topic, COMPRESSED_VIDEO_DATATYPES)
         )
       ) {
         continue;
@@ -232,6 +240,8 @@ export class Images extends SceneExtension<ImageRenderable> {
       );
       return;
     }
+
+    this.renderer.settings.errors.removeFromTopic(imageTopic, NO_CAMERA_INFO_ERR);
     this.#recomputeCameraModel(renderable, cameraInfo);
     renderable.update();
   };
@@ -267,6 +277,10 @@ export class Images extends SceneExtension<ImageRenderable> {
 
   #handleCompressedImage = (messageEvent: PartialMessageEvent<CompressedImage>): void => {
     this.#handleImage(messageEvent, normalizeCompressedImage(messageEvent.message));
+  };
+
+  #handleCompressedVideo = (messageEvent: PartialMessageEvent<CompressedVideo>): void => {
+    this.#handleImage(messageEvent, normalizeCompressedVideo(messageEvent.message));
   };
 
   #handleImage = (messageEvent: PartialMessageEvent<AnyImage>, image: AnyImage): void => {
@@ -327,6 +341,7 @@ export class Images extends SceneExtension<ImageRenderable> {
         `No CameraInfo received on ${settings.cameraInfoTopic}`,
       );
     } else {
+      this.renderer.settings.errors.removeFromTopic(imageTopic, NO_CAMERA_INFO_ERR);
       this.#recomputeCameraModel(renderable, cameraInfo);
     }
   };
@@ -354,7 +369,6 @@ export class Images extends SceneExtension<ImageRenderable> {
         continue;
       }
       this.renderer.settings.errors.removeFromTopic(imageTopic, NO_CAMERA_INFO_ERR);
-
       this.#recomputeCameraModel(renderable, cameraInfo);
       renderable.update();
     }
@@ -404,9 +418,13 @@ export class Images extends SceneExtension<ImageRenderable> {
       | Partial<LayerSettingsImage>
       | undefined;
 
+    const messageTime = image
+      ? toNanoSec("header" in image ? image.header.stamp : image.timestamp)
+      : 0n;
     renderable = new ImageRenderable(imageTopic, this.renderer, {
       receiveTime,
-      messageTime: image ? toNanoSec("header" in image ? image.header.stamp : image.timestamp) : 0n,
+      messageTime,
+      firstMessageTime: messageTime,
       frameId: this.renderer.normalizeFrameId(frameId),
       pose: makePose(),
       settingsPath: ["topics", imageTopic],

@@ -17,9 +17,11 @@ import {
   decodeYUV,
   decodeYUYV,
 } from "@foxglove/den/image";
+import { VideoPlayer } from "@foxglove/den/video";
+import { toMicroSec } from "@foxglove/rostime";
 import { RawImage } from "@foxglove/schemas";
 
-import { CompressedImageTypes } from "./ImageTypes";
+import { CompressedImageTypes, CompressedVideo } from "./ImageTypes";
 import { Image as RosImage } from "../../ros";
 
 export async function decodeCompressedImageToBitmap(
@@ -28,6 +30,37 @@ export async function decodeCompressedImageToBitmap(
 ): Promise<ImageBitmap> {
   const bitmapData = new Blob([image.data], { type: `image/${image.format}` });
   return await createImageBitmap(bitmapData, { resizeWidth });
+}
+
+export async function decodeCompressedVideoToBitmap(
+  frameMsg: CompressedVideo,
+  videoPlayer?: VideoPlayer,
+  firstMessageTime?: bigint,
+  resizeWidth?: number,
+): Promise<ImageBitmap> {
+  if (
+    videoPlayer?.isInitialized() !== true ||
+    (!videoPlayer.hasKeyframe() && !frameMsg.keyframe) ||
+    firstMessageTime == undefined
+  ) {
+    return await emptyVideoFrame(videoPlayer, resizeWidth);
+  }
+
+  // Get the timestamp of this frame as microseconds relative to the first frame
+  const firstTimestampMicros = Number(firstMessageTime / 1000n);
+  const timestampMicros = toMicroSec(frameMsg.timestamp) - firstTimestampMicros;
+
+  const videoFrame = await videoPlayer.decode(
+    frameMsg.data,
+    timestampMicros,
+    frameMsg.keyframe ? "key" : "delta",
+  );
+  if (videoFrame) {
+    const imageBitmap = await self.createImageBitmap(videoFrame, { resizeWidth });
+    videoFrame.close();
+    return imageBitmap;
+  }
+  return await emptyVideoFrame(videoPlayer, resizeWidth);
 }
 
 export type RawImageOptions = {
@@ -90,4 +123,13 @@ export function decodeRawImage(
     default:
       throw new Error(`Unsupported encoding ${encoding}`);
   }
+}
+
+// Performance sensitive, skip the extra await when returning a blank image
+// eslint-disable-next-line @typescript-eslint/promise-function-async
+function emptyVideoFrame(videoPlayer?: VideoPlayer, resizeWidth?: number): Promise<ImageBitmap> {
+  const width = resizeWidth ?? 32;
+  const size = videoPlayer?.codedSize() ?? { width, height: width };
+  const data = new ImageData(size.width, size.height);
+  return createImageBitmap(data, { resizeWidth });
 }

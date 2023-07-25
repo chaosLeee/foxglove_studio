@@ -33,6 +33,7 @@ import { SettingsTreeEntry } from "../../SettingsManager";
 import {
   CAMERA_CALIBRATION_DATATYPES,
   COMPRESSED_IMAGE_DATATYPES,
+  COMPRESSED_VIDEO_DATATYPES,
   RAW_IMAGE_DATATYPES,
 } from "../../foxglove";
 import {
@@ -67,6 +68,7 @@ const ALL_SUPPORTED_IMAGE_SCHEMAS = new Set([
   ...ROS_COMPRESSED_IMAGE_DATATYPES,
   ...RAW_IMAGE_DATATYPES,
   ...COMPRESSED_IMAGE_DATATYPES,
+  ...COMPRESSED_VIDEO_DATATYPES,
 ]);
 
 const ALL_SUPPORTED_CALIBRATION_SCHEMAS = new Set([
@@ -249,6 +251,14 @@ export class ImageMode
           shouldSubscribe: this.#imageShouldSubscribe,
         },
       },
+      {
+        type: "schema",
+        schemaNames: COMPRESSED_VIDEO_DATATYPES,
+        subscription: {
+          handler: this.#messageHandler.handleCompressedVideo,
+          shouldSubscribe: this.#imageShouldSubscribe,
+        },
+      },
     ];
     return subscriptions.concat(this.#annotations.getSubscriptions());
   }
@@ -276,6 +286,7 @@ export class ImageMode
         this.#clearCameraModel();
       }, REMOVE_IMAGE_TIMEOUT_MS);
     }
+    this.#imageRenderable?.videoPlayer?.resetForSeek();
     this.#annotations.removeAllRenderables();
     this.#messageHandler.clear();
     this.#latestImage = undefined;
@@ -624,9 +635,13 @@ export class ImageMode
       // planarProjectionFactor must be 1 to avoid imprecise projection due to small number of grid subdivisions
       planarProjectionFactor: 1,
     };
+    const messageTime = image
+      ? toNanoSec("header" in image ? image.header.stamp : image.timestamp)
+      : 0n;
     renderable = new ImageRenderable(topicName, this.renderer, {
       receiveTime,
-      messageTime: image ? toNanoSec("header" in image ? image.header.stamp : image.timestamp) : 0n,
+      messageTime,
+      firstMessageTime: messageTime,
       frameId: this.renderer.normalizeFrameId(frameId),
       pose: makePose(),
       settingsPath: IMAGE_TOPIC_PATH,
